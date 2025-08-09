@@ -50,6 +50,8 @@ An augmented reality measurement application built with Unity and Google ARCore 
 
 ## 🚀 Getting Started
 
+You can download the APK available in the repository or build it yourself by following these steps:
+
 1. **Clone the Repository**
 
    ```bash
