@@ -10,11 +10,6 @@ public class ARMeasureTool : MonoBehaviour
 {
     [Header("AR Components")]
     public ARRaycastManager raycastManager;
-    public AROcclusionManager occlusionManager; // NEW for depth
-    private Texture2D depthTexture;
-    private short[] depthArray;
-    private int depthWidth;
-    private int depthHeight;
 
     [Header("UI & Prefabs")]
     public GameObject pointPrefab;
@@ -43,10 +38,10 @@ public class ARMeasureTool : MonoBehaviour
     private Transform ringTransform;
 
     private Vector3? currentStartPoint = null;
-    private List<ARRaycastHit> hits = new List<ARRaycastHit>();
 
     [Header("Animation")]
     public Animator animator;
+    private bool foundpoint = false;
 
     private class Measurement
     {
@@ -60,9 +55,6 @@ public class ARMeasureTool : MonoBehaviour
 
     private List<Measurement> measurements = new List<Measurement>();
 
-    private const float MillimeterToMeter = 0.001f;
-    private const float InvalidDepthValue = -1f;
-
     void Start()
     {
         placeButton.onClick.AddListener(PlacePoint);
@@ -75,176 +67,117 @@ public class ARMeasureTool : MonoBehaviour
 
     void Update()
     {
-        UpdateEnvironmentDepthImage();
         UpdatePreviewPoint();
         UpdatePreviewLine();
         BillboardAllTexts();
 
         if (sphereTransform != null)
         {
-            sphereTransform.position = Vector3.Lerp(
-                sphereTransform.position,
+            sphereTransform.localPosition = Vector3.Lerp(
+                sphereTransform.localPosition,
                 sphereTargetPosition,
                 Time.deltaTime * snapSpeed
-            );
+           );
         }
 
-        if (previewPoint != null)
+        if (snappedPosition.HasValue)
         {
-            previewPoint.transform.rotation = Quaternion.Slerp(
-                previewPoint.transform.rotation,
+
+            ringTransform.rotation = Quaternion.Lerp(
+                ringTransform.rotation,
                 previewTargetRotation,
                 Time.deltaTime * snapSpeed
             );
         }
-    }
-
-    // Get and store environment depth texture
-    void UpdateEnvironmentDepthImage()
-    {
-        if (occlusionManager &&
-            occlusionManager.TryAcquireEnvironmentDepthCpuImage(out XRCpuImage image))
+        else
         {
-            using (image)
-            {
-                if (depthTexture == null || depthTexture.width != image.width || depthTexture.height != image.height)
-                {
-                    depthTexture = new Texture2D(image.width, image.height, TextureFormat.R16, false);
-                    depthArray = new short[image.width * image.height];
-                }
-
-                var conversionParams = new XRCpuImage.ConversionParams
-                {
-                    inputRect = new RectInt(0, 0, image.width, image.height),
-                    outputDimensions = new Vector2Int(image.width, image.height),
-                    outputFormat = TextureFormat.R16,
-                    transformation = XRCpuImage.Transformation.None
-                };
-
-                var rawTextureData = depthTexture.GetRawTextureData<byte>();
-                image.Convert(conversionParams, rawTextureData);
-                depthTexture.Apply();
-
-                depthWidth = image.width;
-                depthHeight = image.height;
-
-                var byteBuffer = depthTexture.GetRawTextureData();
-                Buffer.BlockCopy(byteBuffer, 0, depthArray, 0, byteBuffer.Length);
-            }
+            ringTransform.localRotation = Quaternion.Lerp(
+                ringTransform.localRotation,
+                Quaternion.Euler(-90f, 0f, 0f),
+                Time.deltaTime * snapSpeed
+            );
         }
-    }
-
-    // Depth-based lookup
-    float GetDepthFromUV(Vector2 uv)
-    {
-        int depthX = (int)(uv.x * (depthWidth - 1));
-        int depthY = (int)(uv.y * (depthHeight - 1));
-
-        if (depthX >= depthWidth || depthX < 0 || depthY >= depthHeight || depthY < 0)
-            return InvalidDepthValue;
-
-        var depthIndex = (depthY * depthWidth) + depthX;
-        var depthInShort = depthArray[depthIndex];
-        return depthInShort * MillimeterToMeter;
     }
 
     void UpdatePreviewPoint()
     {
-        Vector2 screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
-        bool foundPoint = false;
-        Pose hitPose = new Pose();
-
-        // Try depth raycast first
-        if (depthArray != null && depthArray.Length > 0)
+        if (!foundpoint)
         {
-            float depthMeters = GetDepthFromUV(new Vector2(screenCenter.x / Screen.width, screenCenter.y / Screen.height));
-            if (depthMeters > 0)
+            List<ARRaycastHit> tempHits = new List<ARRaycastHit>();
+            Vector2 screenCenter = new Vector2(Screen.width / 2f, Screen.height / 2f);
+            if (raycastManager.Raycast(screenCenter, tempHits,
+                TrackableType.FeaturePoint | TrackableType.Depth | TrackableType.PlaneWithinPolygon))
             {
-                Vector3 screenPos = new Vector3(screenCenter.x, screenCenter.y, depthMeters);
-                Vector3 worldPos = Camera.main.ScreenToWorldPoint(screenPos);
-                hitPose = new Pose(worldPos, Quaternion.identity);
-                foundPoint = true;
+                foundpoint = true;
+                animator.SetBool("FoundPlane", true);
+            }
+        }
+        
+        // No longer doing manual depth calculations. Relying on AR Core Lab's implementation
+        Vector3 targetPosition = previewPoint.transform.position;
+
+        snappedPosition = null;
+        float closestDist = snapDistanceThreshold;
+        Vector3 closestSnap = Vector3.zero;
+
+        // Check against all measurement endpoints
+        foreach (var m in measurements)
+        {
+            float distA = Vector3.Distance(targetPosition, m.pointA.transform.position);
+            if (distA < closestDist)
+            {
+                closestDist = distA;
+                closestSnap = m.pointA.transform.position;
+                snappedPosition = closestSnap;
+            }
+
+            float distB = Vector3.Distance(targetPosition, m.pointB.transform.position);
+            if (distB < closestDist)
+            {
+                closestDist = distB;
+                closestSnap = m.pointB.transform.position;
+                snappedPosition = closestSnap;
             }
         }
 
-        // Fallback to ARRaycast
-        if (!foundPoint && raycastManager.Raycast(screenCenter, hits,
-            TrackableType.FeaturePoint | TrackableType.Depth | TrackableType.PlaneWithinPolygon))
+        // Check against midpoints of measurements
+        foreach (var m in measurements)
         {
-            hitPose = hits[0].pose;
-            foundPoint = true;
+            Vector3 midpoint = (m.pointA.transform.position + m.pointB.transform.position) / 2f;
+            float distMid = Vector3.Distance(targetPosition, midpoint);
+            if (distMid < closestDist)
+            {
+                closestDist = distMid;
+                closestSnap = midpoint;
+                snappedPosition = closestSnap;
+            }
         }
 
-        if (foundPoint)
+        // Apply snapping or reset
+        if (snappedPosition.HasValue)
         {
-            animator.SetBool("FoundPlane", true);
-            Vector3 targetPosition = hitPose.position;
+            sphereTargetPosition = previewPoint.transform.InverseTransformPoint(snappedPosition.Value);
 
-            snappedPosition = null;
-            float closestDist = snapDistanceThreshold;
-            Vector3 closestSnap = Vector3.zero;
-
-            previewPoint.transform.position = hitPose.position;
-
-            foreach (var m in measurements)
+            if (!lastSnappedPosition.HasValue ||
+                Vector3.Distance(lastSnappedPosition.Value, snappedPosition.Value) > 0.001f)
             {
-                float distA = Vector3.Distance(targetPosition, m.pointA.transform.position);
-                if (distA < closestDist)
-                {
-                    closestDist = distA;
-                    closestSnap = m.pointA.transform.position;
-                    snappedPosition = closestSnap;
-                }
-
-                float distB = Vector3.Distance(targetPosition, m.pointB.transform.position);
-                if (distB < closestDist)
-                {
-                    closestDist = distB;
-                    closestSnap = m.pointB.transform.position;
-                    snappedPosition = closestSnap;
-                }
+                RDG.Vibration.Vibrate(25, 100);
+                lastSnappedPosition = snappedPosition;
             }
 
-            foreach (var m in measurements)
-            {
-                Vector3 midpoint = (m.pointA.transform.position + m.pointB.transform.position) / 2f;
-                float distMid = Vector3.Distance(targetPosition, midpoint);
-                if (distMid < closestDist)
-                {
-                    closestDist = distMid;
-                    closestSnap = midpoint;
-                    snappedPosition = closestSnap;
-                }
-            }
-
-            if (snappedPosition.HasValue)
-            {
-                sphereTargetPosition = snappedPosition.Value;
-                if (!lastSnappedPosition.HasValue ||
-                    Vector3.Distance(lastSnappedPosition.Value, snappedPosition.Value) > 0.001f)
-                {
-                    RDG.Vibration.Vibrate(25, 100);
-                    lastSnappedPosition = snappedPosition;
-                }
-                previewTargetRotation = Quaternion.LookRotation(
-                    Camera.main.transform.position - previewPoint.transform.position
-                ) * Quaternion.Euler(90f, 0f, 0f);
-            }
-            else
-            {
-                previewTargetRotation = hitPose.rotation;
-                sphereTargetPosition = targetPosition;
-                lastSnappedPosition = null;
-            }
-
-            previewPoint.SetActive(true);
+            previewTargetRotation = Quaternion.LookRotation(
+                Camera.main.transform.position - ringTransform.transform.position
+            );
         }
         else
         {
-            previewPoint.SetActive(false);
-            snappedPosition = null;
+            sphereTargetPosition = Vector3.zero;
+            lastSnappedPosition = null;
         }
+
+        previewPoint.SetActive(true);
     }
+
 
     void PlacePoint()
     {
