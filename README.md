@@ -146,4 +146,4 @@ For issues, questions, or contributions, please:
 
 ---
 
-**Note**: This application requires an ARCore-compatible device. Check Google's official [ARCore device list][https://developers.google.com/ar/devices] to ensure compatibility before installation.
+**Note**: This application requires an ARCore-compatible device. Check Google's official [ARCore device list](https://developers.google.com/ar/devices) to ensure compatibility before installation.
