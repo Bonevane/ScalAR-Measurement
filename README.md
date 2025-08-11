@@ -107,14 +107,13 @@ Assets/
 ### Current Known Issues
 
 - **Jittery Placement Pointer**: The placement preview sphere can exhibit minor jittering, especially in low lit environments
-- **Surface Rotation**: The placement pointer does not visually rotate to match slanted or angled surfaces
 
 ### General Limitations
 
 - **Lighting Dependency**: Performance may vary in low-light conditions
 - **Surface Requirements**: Works best on well-textured, non-reflective surfaces
 - **Tracking Loss**: May lose tracking in environments with insufficient visual features
-- **Accuracy**: Measurement accuracy depends on ARCore's plane detection and device calibration
+- **Accuracy**: Measurement accuracy depends on ARCore's Depth API and device calibration
 - **Battery Usage**: Extended use may drain battery due to intensive camera and processing usage
 
 
@@ -147,4 +146,4 @@ For issues, questions, or contributions, please:
 
 ---
 
-**Note**: This application requires an ARCore-compatible device. Check Google's official ARCore device list to ensure compatibility before installation.
+**Note**: This application requires an ARCore-compatible device. Check Google's official [ARCore device list][https://developers.google.com/ar/devices] to ensure compatibility before installation.
