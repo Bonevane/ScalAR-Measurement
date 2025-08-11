@@ -77,7 +77,7 @@ You can download the APK available in the repository or build it yourself by fol
 
 ## 🎮 How to Use
 
-1. **Launch the App**: Start the application on your ARCore-compatible device (Permissions Required)
+1. **Launch the App**: Start the application on your [ARCore-compatible device](https://developers.google.com/ar/devices) (Permissions Required)
 2. **Point Camera**: Aim your device at a flat surface to initialize AR tracking
 3. **Place Points**: Tap the screen or use the place button to set measurement points
 4. **View Distance**: The distance between points will be displayed automatically
